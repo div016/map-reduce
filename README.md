@@ -22,5 +22,3 @@ This project involves building a MapReduce system in C, focused on handling larg
 ## Project Goals
 - Implement MapReduce architecture with task distribution and fault recovery.
 - Ensure system scalability and efficient resource management.
-
-For more details, refer to https://cs162.org/static/hw/hw-map-reduce/.
