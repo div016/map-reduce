@@ -235,10 +235,11 @@ poll_job_reply* poll_job_1_svc(int* argp, struct svc_req* rqstp) {
   return &result;
 }
 
-/* GET_TASK RPC implementation. */
+/* GET_TASK RPC implementation: assigns map or reduce tasks to workers */
 get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
   static get_task_reply result;
 
+  //initialize result fields to default values
   printf("Received get task request\n");
   result.file = "";
   result.output_dir = "";
@@ -249,32 +250,34 @@ get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
   GList *curr_elem;
   static struct new_job *curr_job;
 
+  //if there are no jobs in the queue or job map, return the default waiting response
   if (g_list_length(state->job_queue) == 0 || g_hash_table_size(state->job_map) == 0) {
     return &result;
   }
 
-  //getting next available task from the waiting queue
+  //uterate through the job queue to find a job with an available task from the waiting queue
   for (curr_elem = state->job_queue; curr_elem; curr_elem=curr_elem->next) {
     int curr_job_id = GPOINTER_TO_INT(curr_elem->data);
-    //lookup
+    //lookup the job in the hash table using its job ID
     curr_job = g_hash_table_lookup(state->job_map, GINT_TO_POINTER(curr_job_id));
     //int to pointer(needed in the list) to return job
 
 
-    //are all map tasks done
+    //check are all map tasks done before assigning reduce tasks
     if (curr_job->map_jobs_finished == curr_job->total_map) {
 
-      //all map tasks are done --> assigning reduce tasks
+      //all map tasks are done --> begin assigning reduce tasks
       for (int i = 0; i < curr_job->total_reduce; i++) {
 
 
-        //need to also check how long its been since its been assigned for worker crashes
-        //|| time(NULL) - reduce_assigned_time[i] >= TIMEOUT
+        //need to also check how long its been since a task has been assigned for worker crashes. 
+        //check if a reduce task is uncompleted due to a worker crash (timeout scenario)
         //FOR WORKER CRASHES
         if (curr_job->reduce_assigned[i] &&
           !curr_job->reduce_task_success[i] &&
           time(NULL) - curr_job->reduce_times[i] > TASK_TIMEOUT_SECS) {
 
+          //reassign the failed reduce task
           result.reduce = true;
           curr_job->reduce_assigned[i] = true;
           curr_job->reduce_times[i] = time(NULL);
@@ -293,9 +296,9 @@ get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
           }
           return &result;
         }
-        
+
+        //if the reduce task is not yet assigned, assign it now
         else if (!curr_job->reduce_assigned[i]) {
-          //assign reduce task
           result.reduce = true;
           curr_job->reduce_assigned[i] = true;
           curr_job->reduce_times[i] = time(NULL);
@@ -317,16 +320,16 @@ get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
       }
     }
     else {
-      //all map tasks are not done --> assigning map tasks
+      //map tasks are not yet finished --> assigning map tasks
       for (int i = 0; i < curr_job->total_map; i++) {
 
-        //need to also check how long its been since its been assigned
-        // || time(NULL) - map_assigned_time[i] >= TIMEOUT
+        //check if a map task failed due to a worker crash (timeout scenario)
         //FOR WORKER CRASHES
         if (curr_job->map_assigned[i] &&
           !curr_job->map_task_success[i] &&
           time(NULL) - curr_job->map_times[i] > TASK_TIMEOUT_SECS) {
 
+          //reassign the failed map task
           result.reduce = false;
           curr_job->map_assigned[i] = true;
           curr_job->map_times[i] = time(NULL);
@@ -347,8 +350,8 @@ get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
           
         }
 
+        //if the map task is not yet assigned, assign it now
         else if (!curr_job->map_assigned[i]) {
-          //assign map task
           result.reduce = false;
           curr_job->map_assigned[i] = true;
           curr_job->map_times[i] = time(NULL);
@@ -366,6 +369,7 @@ get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
             result.args.args_len = strlen(curr_job->args);
           }
 
+          //if no task is assigned, return the default waiting response
           return &result;
         }
       }
