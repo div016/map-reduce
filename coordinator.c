@@ -53,7 +53,14 @@ int main(int argc, char** argv) {
   /* NOTREACHED */
 }
 
-/* SUBMIT_JOB RPC implementation: Handles job submission */
+/*
+ * SUBMIT_JOB RPC implementation: Handles job submission
+ * This function processes job submission requests from clients. It allocates and 
+ * initializes memory for the job structure, sets unique job IDs, and stores 
+ * relevant job data. It also handles memory for map and reduce tasks, tracks 
+ * task completion states, validates application names, and stores the job in 
+ * the job queue and job map. It ensures the output directory exists.
+*/
 int* submit_job_1_svc(submit_job_request* argp, struct svc_req* rqstp) {
   static int result;
 
@@ -69,7 +76,7 @@ int* submit_job_1_svc(submit_job_request* argp, struct svc_req* rqstp) {
   curr_job->job_id = state->curr_job_id;
   state->curr_job_id = state->curr_job_id + 1;
 
-  // assign and return a unique job ID 
+  // assign and return a unique job ID.
   result = curr_job->job_id;
 
   //strings need to be duplicated to avoid memory issues
@@ -81,7 +88,7 @@ int* submit_job_1_svc(submit_job_request* argp, struct svc_req* rqstp) {
   bool *temp_map = malloc(sizeof(bool) * curr_job->total_map);
   if (temp_map != NULL) {
     for (int i = 0; i < curr_job->total_map; i++) {
-      temp_map[i] = false;
+      temp_map[i] = false; // initialize all tasks as unassigned
     }
   }
   else {
@@ -198,19 +205,25 @@ int* submit_job_1_svc(submit_job_request* argp, struct svc_req* rqstp) {
   return &result;
 }
 
-/* POLL_JOB RPC implementation. */
+/* POLL_JOB RPC implementation: checks the status of a submitted job */
 poll_job_reply* poll_job_1_svc(int* argp, struct svc_req* rqstp) {
   static poll_job_reply result;
 
   printf("Received poll job request\n");
 
+  
   static struct new_job *curr_job;
+
+  //if there are no jobs in the job map, return an invalid job ID response
   if (g_hash_table_size(state->job_map) == 0) {
     result.invalid_job_id = true;
     return &result;
   }
+
+  //look up the job in the hash table using the provided job ID
   curr_job = g_hash_table_lookup(state->job_map, GINT_TO_POINTER(*argp));
 
+  //if the job is not found or has an invalid job ID, return an invalid job ID response
   if (curr_job == NULL || curr_job->job_id < 0) {
     result.invalid_job_id = true;
     return &result;
