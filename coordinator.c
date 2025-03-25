@@ -1,5 +1,7 @@
 /**
- * The MapReduce coordinator.
+ * The MapReduce coordinator. The coordinator is responsible for handling job submissions, task assignments, and monitoring progress.
+ * This script implements an RPC server to interact with worker nodes, receiving job submissions, polling job status, 
+ * and assigning map/reduce tasks to workers.
  */
 
 #include "coordinator.h"
@@ -17,8 +19,10 @@ extern void coordinator_1(struct svc_req*, SVCXPRT*);
 int main(int argc, char** argv) {
   register SVCXPRT* transp;
 
+  // Unset any previous service registration for COORDINATOR
   pmap_unset(COORDINATOR, COORDINATOR_V1);
 
+  // Create a UDP transport for RPC communication.
   transp = svcudp_create(RPC_ANYSOCK);
   if (transp == NULL) {
     fprintf(stderr, "%s", "cannot create udp service.");
@@ -29,6 +33,7 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
+  // Create a TCP transport for RPC communication.
   transp = svctcp_create(RPC_ANYSOCK, 0, 0);
   if (transp == NULL) {
     fprintf(stderr, "%s", "cannot create tcp service.");
@@ -41,28 +46,20 @@ int main(int argc, char** argv) {
 
   coordinator_init(&state);
 
+  // Start the service and handle incoming requests
   svc_run();
   fprintf(stderr, "%s", "svc_run returned");
   exit(1);
   /* NOTREACHED */
 }
 
-/* RPC implementation. */
-int* example_1_svc(int* argp, struct svc_req* rqstp) {
-  static int result;
-
-  result = *argp + 1;
-
-  return &result;
-}
-
-/* SUBMIT_JOB RPC implementation. */
+/* SUBMIT_JOB RPC implementation: Handles job submission */
 int* submit_job_1_svc(submit_job_request* argp, struct svc_req* rqstp) {
   static int result;
 
   printf("Received submit job request\n");
 
-
+  // allocate memory for the current job structure
   struct new_job *curr_job = malloc(sizeof(struct new_job));
   if (curr_job == NULL) {
     result = -1;
@@ -72,14 +69,15 @@ int* submit_job_1_svc(submit_job_request* argp, struct svc_req* rqstp) {
   curr_job->job_id = state->curr_job_id;
   state->curr_job_id = state->curr_job_id + 1;
 
-  // Assign and return a unique job ID 
+  // assign and return a unique job ID 
   result = curr_job->job_id;
 
-  //strings need to be duplicated
+  //strings need to be duplicated to avoid memory issues
   curr_job->output_dir = strdup(argp->output_dir);
   curr_job->total_reduce = argp->n_reduce;
   curr_job->total_map = argp->files.files_len;
 
+  //initialize task states
   bool *temp_map = malloc(sizeof(bool) * curr_job->total_map);
   if (temp_map != NULL) {
     for (int i = 0; i < curr_job->total_map; i++) {
