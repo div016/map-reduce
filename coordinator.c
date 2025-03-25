@@ -178,10 +178,10 @@ int* submit_job_1_svc(submit_job_request* argp, struct svc_req* rqstp) {
     curr_job->args = strdup(argp->args.args_val);
   }
 
-  //map_finished should equal number of input files for it to be finishes
+  //map_finished should equal the number of input files for it to be a finished job
   curr_job->map_jobs_finished = 0;
 
-  //reduce_finished should equal n_reduce for it to be finished
+  //reduce_finished should equal n_reduce for it to a finished job
   curr_job->reduce_jobs_finished = 0;
   curr_job->success = false;
   curr_job->failed = false;
