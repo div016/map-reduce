@@ -380,7 +380,7 @@ get_task_reply* get_task_1_svc(void* argp, struct svc_req* rqstp) {
   return &result;
 }
 
-/* FINISH_TASK RPC implementation. */
+/* FINISH_TASK RPC implementation: marks a task as finished and updates job status */
 void* finish_task_1_svc(finish_task_request* argp, struct svc_req* rqstp) {
   static char* result;
 
@@ -391,20 +391,26 @@ void* finish_task_1_svc(finish_task_request* argp, struct svc_req* rqstp) {
   static int curr_job_id;
   curr_job_id = argp->job_id;
 
+  // check if there are no jobs in the queue or job map, return immediately
   if (g_list_length(state->job_queue) == 0 || g_hash_table_size(state->job_map) == 0) {
     return (void*)&result;
   }
 
   curr_job = g_hash_table_lookup(state->job_map, GINT_TO_POINTER(argp->job_id));
 
+  //if the task was completed successfully
   if(argp->success) {
     if (!argp->reduce) {
+      // task was a map task --> increment completed map jobs count
       curr_job->map_jobs_finished++;
       curr_job->map_task_success[argp->task] = true;
     }
     else {
+      // task was a reduce task --> increment completed reduce jobs count
       curr_job->reduce_jobs_finished++;
       curr_job->reduce_task_success[argp->task] = true;
+      
+      //if all reduce tasks are completed, mark the job as successful
       if (curr_job->reduce_jobs_finished == curr_job->total_reduce) {
         curr_job->done = true;
         curr_job->success = true;
@@ -413,10 +419,12 @@ void* finish_task_1_svc(finish_task_request* argp, struct svc_req* rqstp) {
     }
   } 
   else {
+    //task failed: Mark job as failed and set it as done
     curr_job->failed = true;
     curr_job->done = true;
   }
 
+  //if the job is completed (either successfully or due to failure), remove it from the queue
   if (curr_job->done) {
     state->job_queue = g_list_remove(state->job_queue, GINT_TO_POINTER(argp->job_id));
 
