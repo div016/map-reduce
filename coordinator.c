@@ -10,7 +10,7 @@
 #define SIG_PF void (*)(int)
 #endif
 
-/* Global coordinator state. */
+/* Global coordinator state variable. */
 coordinator* state;
 
 extern void coordinator_1(struct svc_req*, SVCXPRT*);
